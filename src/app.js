@@ -16,7 +16,21 @@ connectDB();
 const app = express();
 
 app.use(helmet());
-app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
+app.use(cors({
+    origin: function (origin, callback) {
+        const allowed = [
+            process.env.CLIENT_URL,
+            'https://dev-collaber-fe-eight.vercel.app',
+            'http://localhost:3000'
+        ];
+        if (!origin || allowed.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true
+}));
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(cookieParser());
