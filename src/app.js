@@ -12,6 +12,8 @@ const swipeRoutes = require('./routes/swipe.routes');
 const matchRoutes = require('./routes/match.routes');
 const messageRoutes = require('./routes/message.routes');
 const projectRoutes = require('./routes/project.routes');
+const notificationRoutes = require('./routes/notification.routes');
+
 connectDB();
 const app = express();
 
@@ -48,4 +50,5 @@ app.use('/api/swipe', limiter);
 app.use('/api/matches', limiter);
 app.use('/api/messages', limiter);
 app.use('/api/projects', projectRoutes);
+app.use('/api/notifications', notificationRoutes);
 module.exports = app;

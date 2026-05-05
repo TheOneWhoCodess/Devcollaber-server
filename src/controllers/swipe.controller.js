@@ -3,6 +3,7 @@ const Match = require('../models/Match');
 const User = require('../models/User');
 const { computeMatchScore } = require('../services/matchmaking.service');
 const { getIO } = require('../socket/socket');
+const { createNotification } = require('../services/notification.service');
 
 const swipe = async (req, res) => {
     try {
@@ -19,6 +20,14 @@ const swipe = async (req, res) => {
         );
 
         let match = null;
+        await createNotification({
+            user: targetUser._id,
+            type: 'new_match',
+            title: 'New Match!',
+            body: `You matched with ${req.user.name}`,
+            link: '/matches',
+            from: req.user._id,
+        });
 
         if (action === 'like' || action === 'superlike') {
             const mutual = await Swipe.findOne({

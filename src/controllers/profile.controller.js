@@ -70,7 +70,13 @@ const getDiscoverFeed = async (req, res) => {
         if (commitment) filter.commitment = commitment;
         if (projectType) filter.projectType = projectType;
         if (skills) filter.skills = { $in: skills.split(',') };
-
+        if (search) {
+            filter.$or = [
+                { name: { $regex: search, $options: 'i' } },
+                { skills: { $in: [new RegExp(search, 'i')] } },
+                { role: { $regex: search, $options: 'i' } },
+            ];
+        }
         const profiles = await User.find(filter)
             .select('-password -email')
             .sort({ eloScore: -1 })
@@ -104,4 +110,17 @@ const updateProfile = async (req, res) => {
     }
 };
 
-module.exports = { getDiscoverFeed, updateProfile, uploadAvatar };
+const getPublicProfile = async (req, res) => {
+    try {
+        const user = await User.findOne({
+            name: { $regex: new RegExp(`^${req.params.name}$`, 'i') }
+        }).select('-password -email');
+
+        if (!user) return res.status(404).json({ message: 'User not found' });
+        res.json({ success: true, user });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
+module.exports = { getDiscoverFeed, updateProfile, uploadAvatar, getPublicProfile };

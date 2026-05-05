@@ -1,5 +1,6 @@
 const Project = require('../models/project');
 const Application = require('../models/Application');
+const { createNotification } = require('../services/notification.service');
 
 // GET /api/projects — browse all open projects
 const getProjects = async (req, res) => {
@@ -157,6 +158,14 @@ const applyToProject = async (req, res) => {
             message: req.body.message,
             role: req.body.role,
         });
+        await createNotification({
+            user: project.postedBy,
+            type: "new_application",
+            title: "New application received",
+            body: `${req.user.name} applied to ${project.title}`,
+            link: `/dashboard/projects/${project._id}`,
+            from: req.user,
+        });
 
         res.status(201).json({ success: true, application });
     } catch (err) {
@@ -199,6 +208,14 @@ const updateApplication = async (req, res) => {
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
+    await createNotification({
+        user: application.applicant,
+        type: req.body.status === "accepted" ? "application_accepted" : "application_rejected",
+        title: req.body.status === "accepted" ? "Application accepted" : "Application rejected",
+        body: `${req.user.name} ${req.body.status === "accepted" ? "accepted" : "rejected"} your application to ${project.title}`,
+        link: `/dashboard/projects/${project._id}`,
+        from: req.user,
+    });
 };
 
 module.exports = {

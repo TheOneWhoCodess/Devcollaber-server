@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getDiscoverFeed, updateProfile, uploadAvatar } = require('../controllers/profile.controller');
+const { getDiscoverFeed, updateProfile, uploadAvatar, getPublicProfile } = require('../controllers/profile.controller');
 const { protect } = require('../middleware/auth.middleware');
 const multer = require('multer');
 
@@ -16,5 +16,5 @@ const upload = multer({
 router.get('/discover', protect, getDiscoverFeed);
 router.put('/update', protect, updateProfile);
 router.post('/avatar', protect, upload.single('avatar'), uploadAvatar);
-
+router.get('/user/:name', getPublicProfile);
 module.exports = router;
