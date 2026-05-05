@@ -11,7 +11,7 @@ const profileRoutes = require('./routes/profile.routes');
 const swipeRoutes = require('./routes/swipe.routes');
 const matchRoutes = require('./routes/match.routes');
 const messageRoutes = require('./routes/message.routes');
-
+const projectRoutes = require('./routes/project.routes');
 connectDB();
 const app = express();
 
@@ -47,5 +47,5 @@ app.use('/api/profile', limiter);
 app.use('/api/swipe', limiter);
 app.use('/api/matches', limiter);
 app.use('/api/messages', limiter);
-
+app.use('/api/projects', projectRoutes);
 module.exports = app;
