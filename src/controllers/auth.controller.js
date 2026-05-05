@@ -19,8 +19,8 @@ const sendTokenResponse = (user, statusCode, isNewUser, res) => {
     const token = signToken(user._id);
     res.cookie('token', token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        secure: true,
+        sameSite: 'none',
         maxAge: 7 * 24 * 60 * 60 * 1000,
     });
     res.status(statusCode).json({
@@ -29,7 +29,6 @@ const sendTokenResponse = (user, statusCode, isNewUser, res) => {
         user: { _id: user._id, name: user.name, email: user.email, role: user.role, avatar: user.avatar },
     });
 };
-
 const googleAuth = async (req, res) => {
     try {
         const { idToken } = req.body;
@@ -60,7 +59,12 @@ const googleAuth = async (req, res) => {
 };
 
 const logout = (req, res) => {
-    res.cookie('token', '', { maxAge: 1 });
+    res.cookie('token', '', {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        maxAge: 1
+    });
     res.json({ success: true });
 };
 
