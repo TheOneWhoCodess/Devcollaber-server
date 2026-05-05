@@ -15,9 +15,13 @@ const projectRoutes = require('./routes/project.routes');
 const notificationRoutes = require('./routes/notification.routes');
 
 connectDB();
+
 const app = express();
 
+app.set('trust proxy', 1);
+
 app.use(helmet());
+
 app.use(cors({
     origin: function (origin, callback) {
         const allowed = [
@@ -25,30 +29,44 @@ app.use(cors({
             'https://dev-collaber-fe-eight.vercel.app',
             'http://localhost:3000'
         ];
+
         if (!origin || allowed.includes(origin)) {
-            callback(null, true);
-        } else {
-            callback(new Error('Not allowed by CORS'));
+            return callback(null, true);
         }
+
+        return callback(new Error('Not allowed by CORS'));
     },
     credentials: true
 }));
+
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(cookieParser());
 
-const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 500 });
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 500
+});
 
+// Apply limiter BEFORE routes
+app.use('/api/profile', limiter);
+app.use('/api/swipe', limiter);
+app.use('/api/matches', limiter);
+app.use('/api/messages', limiter);
+app.use('/api/projects', limiter);
+app.use('/api/notifications', limiter);
+
+// Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/swipe', swipeRoutes);
 app.use('/api/matches', matchRoutes);
 app.use('/api/messages', messageRoutes);
-
-app.use('/api/profile', limiter);
-app.use('/api/swipe', limiter);
-app.use('/api/matches', limiter);
-app.use('/api/messages', limiter);
 app.use('/api/projects', projectRoutes);
 app.use('/api/notifications', notificationRoutes);
+
+app.get('/', (req, res) => {
+    res.json({ success: true, message: 'DevCollab API running' });
+});
+
 module.exports = app;
