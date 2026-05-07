@@ -19,8 +19,8 @@ const sendTokenResponse = (user, statusCode, isNewUser, res) => {
     const token = signToken(user._id);
     res.cookie('token', token, {
         httpOnly: true,
-        secure: true,
-        sameSite: 'none',
+        secure: isProduction,
+        sameSite: isProduction ? 'none' : 'lax',
         maxAge: 7 * 24 * 60 * 60 * 1000,
     });
     res.status(statusCode).json({
@@ -61,8 +61,8 @@ const googleAuth = async (req, res) => {
 const logout = (req, res) => {
     res.cookie('token', '', {
         httpOnly: true,
-        secure: true,
-        sameSite: 'none',
+        secure: isProduction,
+        sameSite: isProduction ? 'none' : 'lax',
         maxAge: 1
     });
     res.json({ success: true });
