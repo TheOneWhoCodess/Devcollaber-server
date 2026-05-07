@@ -27,6 +27,7 @@ const sendTokenResponse = (user, statusCode, isNewUser, res) => {
     res.status(statusCode).json({
         success: true,
         isNewUser,
+        token,
         user: { _id: user._id, name: user.name, email: user.email, role: user.role, avatar: user.avatar },
     });
 };
