@@ -17,6 +17,7 @@ const signToken = (id) =>
 
 const sendTokenResponse = (user, statusCode, isNewUser, res) => {
     const token = signToken(user._id);
+    const isProduction = process.env.NODE_ENV === 'production';
     res.cookie('token', token, {
         httpOnly: true,
         secure: isProduction,
