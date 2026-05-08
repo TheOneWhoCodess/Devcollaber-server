@@ -57,7 +57,7 @@ const uploadAvatar = async (req, res) => {
 
 const getDiscoverFeed = async (req, res) => {
     try {
-        const { role, skills, commitment, projectType, limit = 10 } = req.query;
+        const { role, skills, commitment, projectType, search, limit = 10 } = req.query;
         const swiped = await Swipe.find({ from: req.user._id }).select('to');
         const swipedIds = swiped.map(s => s.to);
 
