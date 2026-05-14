@@ -6,6 +6,7 @@ const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 const connectDB = require('./config/db');
 
+// ✅ all imports together at the top
 const authRoutes = require('./routes/auth.routes');
 const profileRoutes = require('./routes/profile.routes');
 const swipeRoutes = require('./routes/swipe.routes');
@@ -13,14 +14,16 @@ const matchRoutes = require('./routes/match.routes');
 const messageRoutes = require('./routes/message.routes');
 const projectRoutes = require('./routes/project.routes');
 const notificationRoutes = require('./routes/notification.routes');
+const githubRoutes = require('./routes/github.routes');
 
 connectDB();
 
 const app = express();
 
 app.set('trust proxy', 1);
-
-app.use(helmet());
+app.use(helmet({
+    crossOriginOpenerPolicy: false,
+}));
 
 app.use(cors({
     origin: function (origin, callback) {
@@ -29,11 +32,7 @@ app.use(cors({
             'https://dev-collaber-fe-eight.vercel.app',
             'http://localhost:3000'
         ];
-
-        if (!origin || allowed.includes(origin)) {
-            return callback(null, true);
-        }
-
+        if (!origin || allowed.includes(origin)) return callback(null, true);
         return callback(new Error('Not allowed by CORS'));
     },
     credentials: true
@@ -43,6 +42,7 @@ app.use(morgan('dev'));
 app.use(express.json());
 app.use(cookieParser());
 
+// ✅ limiter defined before it's used
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 500
@@ -55,6 +55,7 @@ app.use('/api/matches', limiter);
 app.use('/api/messages', limiter);
 app.use('/api/projects', limiter);
 app.use('/api/notifications', limiter);
+app.use('/api/github', limiter); // ✅ now safe — limiter is defined above
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -64,6 +65,7 @@ app.use('/api/matches', matchRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/github', githubRoutes);
 
 app.get('/', (req, res) => {
     res.json({ success: true, message: 'DevCollab API running' });

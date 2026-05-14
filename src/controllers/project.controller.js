@@ -195,6 +195,8 @@ const getApplications = async (req, res) => {
 const updateApplication = async (req, res) => {
     try {
         const project = await Project.findById(req.params.id);
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+
         if (project.postedBy.toString() !== req.user._id.toString())
             return res.status(403).json({ message: 'Not authorized' });
 
@@ -204,19 +206,26 @@ const updateApplication = async (req, res) => {
             { new: true }
         ).populate('applicant', 'name avatar role');
 
+        if (!application) {
+            return res.status(404).json({ message: 'Application not found' });
+        }
+
+        // send notification
+        await createNotification({
+            user: application.applicant,
+            type: req.body.status === "accepted" ? "application_accepted" : "application_rejected",
+            title: req.body.status === "accepted" ? "Application accepted" : "Application rejected",
+            body: `${req.user.name} ${req.body.status === "accepted" ? "accepted" : "rejected"} your application to ${project.title}`,
+            link: `/dashboard/projects/${project._id}`,
+            from: req.user,
+        });
+
         res.json({ success: true, application });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
-    await createNotification({
-        user: application.applicant,
-        type: req.body.status === "accepted" ? "application_accepted" : "application_rejected",
-        title: req.body.status === "accepted" ? "Application accepted" : "Application rejected",
-        body: `${req.user.name} ${req.body.status === "accepted" ? "accepted" : "rejected"} your application to ${project.title}`,
-        link: `/dashboard/projects/${project._id}`,
-        from: req.user,
-    });
 };
+
 
 module.exports = {
     getProjects, getProject, createProject, updateProject,
