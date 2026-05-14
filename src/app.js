@@ -35,9 +35,10 @@ app.use(cors({
         if (!origin || allowed.includes(origin)) return callback(null, true);
         return callback(new Error('Not allowed by CORS'));
     },
-    credentials: true
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization'], // ✅ explicitly allow Authorization
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], // ✅ allow preflight
 }));
-
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(cookieParser());
