@@ -15,6 +15,8 @@ const UserSchema = new mongoose.Schema({
     commitment: { type: String, enum: ['parttime', 'fulltime', 'flexible'] },
     experience: { type: Number, default: 0 },
     github: { type: String, default: '' },
+    githubSummary: { type: String, default: '' },     // AI-generated plain-English repo summary
+    githubSummaryUpdatedAt: { type: Date },
     linkedin: { type: String, default: '' },
     isAvailable: { type: Boolean, default: true },
     location: { type: String },
@@ -31,5 +33,8 @@ UserSchema.methods.matchPassword = function (entered) {
 };
 
 UserSchema.index({ skills: 1, role: 1, isAvailable: 1 });
+// Discover feed filters by availability then sorts by ELO descending —
+// this compound index lets Mongo satisfy that query without an in-memory sort.
+UserSchema.index({ isAvailable: 1, eloScore: -1 });
 
 module.exports = mongoose.model('User', UserSchema);
