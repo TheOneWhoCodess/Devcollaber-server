@@ -15,6 +15,8 @@ const messageRoutes = require('./routes/message.routes');
 const projectRoutes = require('./routes/project.routes');
 const notificationRoutes = require('./routes/notification.routes');
 const githubRoutes = require('./routes/github.routes');
+const helpRoutes = require('./routes/help.routes');
+const feedbackRoutes = require('./routes/feedback.routes');
 
 connectDB();
 
@@ -49,6 +51,14 @@ const limiter = rateLimit({
     max: 500
 });
 
+// Stricter limiter for the AI help chat specifically — each message is
+// an LLM call, so this deserves a tighter cap than regular CRUD routes
+// to avoid one user accidentally burning through the Groq free tier.
+const helpLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 60,
+});
+
 // Apply limiter BEFORE routes
 app.use('/api/profile', limiter);
 app.use('/api/swipe', limiter);
@@ -57,6 +67,8 @@ app.use('/api/messages', limiter);
 app.use('/api/projects', limiter);
 app.use('/api/notifications', limiter);
 app.use('/api/github', limiter); // ✅ now safe — limiter is defined above
+app.use('/api/feedback', limiter);
+app.use('/api/help', helpLimiter);
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -67,6 +79,8 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/github', githubRoutes);
+app.use('/api/help', helpRoutes);
+app.use('/api/feedback', feedbackRoutes);
 
 app.get('/', (req, res) => {
     res.json({ success: true, message: 'DevCollab API running' });
