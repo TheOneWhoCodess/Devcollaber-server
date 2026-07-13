@@ -164,4 +164,53 @@ Return JSON only.`;
     }
 };
 
-module.exports = { generateMatchExplanation, generateGithubSummary };
+// --- Feature: AI Project Idea Generator ---
+
+const projectIdeaSchema = {
+    type: Type.OBJECT,
+    properties: {
+        title: { type: Type.STRING },
+        description: { type: Type.STRING },
+        techStack: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+        },
+    },
+    required: ['title', 'description', 'techStack'],
+};
+
+const fallbackProjectIdea = ({ sharedSkills = [] }) => ({
+    title: 'Collaborative Tool',
+    description: 'A project that plays to both of your strengths — worth discussing directly to find the right fit.',
+    techStack: sharedSkills.slice(0, 4),
+});
+
+const generateProjectIdea = async ({ userA, userB, sharedSkills = [] }) => {
+    try {
+        const prompt = `Two developers matched on a project-collaboration app and want a concrete project idea to build together.
+
+Developer A: role=${userA.role}, skills=${userA.skills.join(', ')}, experience=${userA.experience} years, project idea="${userA.projectIdea || 'not specified'}"
+Developer B: role=${userB.role}, skills=${userB.skills.join(', ')}, experience=${userB.experience} years, project idea="${userB.projectIdea || 'not specified'}"
+Shared skills: ${sharedSkills.join(', ') || 'none directly, but complementary roles'}
+
+Suggest one specific, buildable project idea that uses both developers' skills. Prefer something scoped for a side project (not a huge SaaS), with a clear angle, not generic ("build a web app"). Return JSON only with:
+- title: a short punchy project name (max 6 words)
+- description: 2 sentences max, concrete about what it does
+- techStack: 3-6 technologies drawn primarily from their actual listed skills`;
+
+        const result = await callGemini(prompt, projectIdeaSchema);
+        if (!result?.title || !result?.description) {
+            return fallbackProjectIdea({ sharedSkills });
+        }
+        return {
+            title: result.title,
+            description: result.description,
+            techStack: Array.isArray(result.techStack) ? result.techStack : [],
+        };
+    } catch (err) {
+        console.error('Project idea generation failed:', err.message);
+        return fallbackProjectIdea({ sharedSkills });
+    }
+};
+
+module.exports = { generateMatchExplanation, generateGithubSummary, generateProjectIdea };
