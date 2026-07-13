@@ -3,6 +3,7 @@ const router = express.Router();
 const Match = require('../models/Match');
 const User = require('../models/User');
 const { protect } = require('../middleware/auth.middleware');
+const { checkAiUsageLimit } = require('../middleware/checkAiUsageLimit');
 const { getIO } = require('../socket/socket');
 const { generateProjectIdea, generateIcebreaker, runMatchConcierge } = require('../services/vertexai.service');
 const { computeMatchScore } = require('../services/matchmaking.service');
@@ -23,8 +24,9 @@ router.get('/', protect, async (req, res) => {
 // unlike the match explanation which fires automatically on match
 // creation. Fire-and-forget, same pattern as attachMatchExplanation in
 // swipe.controller.js: respond immediately, push the result over socket
-// once it's ready.
-router.post('/:matchId/project-idea', protect, async (req, res) => {
+// once it's ready. Costs an LLM call, so it's subject to the free-tier
+// daily AI usage cap.
+router.post('/:matchId/project-idea', protect, checkAiUsageLimit, async (req, res) => {
     try {
         const match = await Match.findById(req.params.matchId);
         if (!match) return res.status(404).json({ message: 'Match not found' });
@@ -81,8 +83,10 @@ router.post('/:matchId/project-idea', protect, async (req, res) => {
 // (fixed: always generates a project idea), this endpoint lets the MODEL
 // decide what would help this match, by giving it tools to investigate
 // first (chat history, GitHub activity). See runMatchConcierge in
-// vertexai.service.js for the actual agent loop.
-router.post('/:matchId/concierge', protect, async (req, res) => {
+// vertexai.service.js for the actual agent loop. Costs an LLM call
+// (possibly several, via the agent loop), so it's subject to the
+// free-tier daily AI usage cap.
+router.post('/:matchId/concierge', protect, checkAiUsageLimit, async (req, res) => {
     try {
         const match = await Match.findById(req.params.matchId).populate('users');
         if (!match) return res.status(404).json({ message: 'Match not found' });

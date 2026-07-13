@@ -17,6 +17,7 @@ const notificationRoutes = require('./routes/notification.routes');
 const githubRoutes = require('./routes/github.routes');
 const helpRoutes = require('./routes/help.routes');
 const feedbackRoutes = require('./routes/feedback.routes');
+const paymentRoutes = require('./routes/payment.routes');
 
 connectDB();
 
@@ -69,6 +70,7 @@ app.use('/api/notifications', limiter);
 app.use('/api/github', limiter); // ✅ now safe — limiter is defined above
 app.use('/api/feedback', limiter);
 app.use('/api/help', helpLimiter);
+app.use('/api/payment', limiter);
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -81,6 +83,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/github', githubRoutes);
 app.use('/api/help', helpRoutes);
 app.use('/api/feedback', feedbackRoutes);
+app.use('/api/payment', paymentRoutes);
 
 app.get('/', (req, res) => {
     res.json({ success: true, message: 'DevCollab API running' });

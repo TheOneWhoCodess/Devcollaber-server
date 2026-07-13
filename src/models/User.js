@@ -21,6 +21,28 @@ const UserSchema = new mongoose.Schema({
     isAvailable: { type: Boolean, default: true },
     location: { type: String },
     eloScore: { type: Number, default: 1200 },   // for match ranking
+
+    // --- Business model / premium tier ---
+    plan: {
+        type: String,
+        enum: ['free', 'premium'],
+        default: 'free',
+    },
+    premiumExpiresAt: {
+        type: Date,
+    },
+
+    // --- Free-tier daily AI usage tracking ---
+    // Counts toward a daily cap on AI-powered actions (GitHub sync,
+    // Project Idea generation, Match Concierge). Premium users bypass
+    // this cap entirely — see checkAiUsageLimit middleware.
+    aiUsageCount: {
+        type: Number,
+        default: 0,
+    },
+    aiUsageDate: {
+        type: Date, // the day aiUsageCount is counting for; reset when this is stale
+    },
 }, { timestamps: true });
 
 UserSchema.pre('save', async function () {
