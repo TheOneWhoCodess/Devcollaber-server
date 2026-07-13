@@ -37,7 +37,17 @@ const fetchGithubData = async (rawUsername) => {
         fetch(`https://api.github.com/users/${username}/repos?sort=stars&per_page=10`, { headers }),
     ]);
 
-    if (!userRes.ok) return null;
+    if (!userRes.ok) {
+        // Log the real reason instead of collapsing every failure into
+        // an identical "not found" — 403 (rate limit) and 404 (actually
+        // missing) look the same to the frontend otherwise.
+        const body = await userRes.text().catch(() => '');
+        console.error(
+            `[github] fetch failed for "${username}": status=${userRes.status} ` +
+            `rateLimitRemaining=${userRes.headers.get('x-ratelimit-remaining')} body=${body.slice(0, 300)}`
+        );
+        return null;
+    }
 
     const userData = await userRes.json();
     const repos = await reposRes.json();
