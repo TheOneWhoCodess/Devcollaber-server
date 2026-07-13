@@ -86,4 +86,10 @@ app.get('/', (req, res) => {
     res.json({ success: true, message: 'DevCollab API running' });
 });
 
+// Sentry error handler — must come AFTER all routes so it can catch
+// errors thrown by them, but BEFORE any other custom error-handling
+// middleware (there isn't one here yet, so this is safely last).
+const Sentry = require('@sentry/node');
+Sentry.setupExpressErrorHandler(app);
+
 module.exports = app;

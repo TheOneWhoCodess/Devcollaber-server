@@ -13,6 +13,7 @@
   "type": "commonjs",
   "dependencies": {
     "@google/genai": "^2.11.0",
+    "@sentry/node": "^10.65.0",
     "bcryptjs": "^3.0.3",
     "cloudinary": "^2.10.0",
     "cookie-parser": "^1.4.7",

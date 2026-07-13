@@ -1,4 +1,6 @@
-require('dotenv').config();  // must be FIRST line
+require('dotenv').config();  
+
+require('./instrument');     
 
 const http = require('http');
 const app = require('./src/app');
