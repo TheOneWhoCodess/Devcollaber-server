@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const Swipe = require('../models/Swipe');
+const Match = require('../models/Match');
 const cloudinary = require('cloudinary').v2;
 const streamifier = require('streamifier');
 
@@ -55,14 +56,39 @@ const uploadAvatar = async (req, res) => {
     }
 };
 
+// How long a passed/unreciprocated-liked profile stays hidden from Discover
+// before it's eligible to resurface. Mutual matches are excluded separately
+// below and are never subject to this cooldown — they always stay hidden
+// from Discover since they belong in /matches instead.
+const SWIPE_COOLDOWN_DAYS = 1;
+
 const getDiscoverFeed = async (req, res) => {
     try {
         const { role, skills, commitment, projectType, search, limit = 10 } = req.query;
-        const swiped = await Swipe.find({ from: req.user._id }).select('to');
-        const swipedIds = swiped.map(s => s.to);
+
+        const cooldownDate = new Date(Date.now() - SWIPE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
+
+        const [recentSwipes, matches] = await Promise.all([
+            // Only swipes from within the cooldown window stay excluded —
+            // anything older is eligible to resurface in Discover again.
+            Swipe.find({
+                from: req.user._id,
+                createdAt: { $gte: cooldownDate },
+            }).select('to'),
+            // Mutual matches are always excluded, regardless of age — a
+            // matched user belongs in /matches, not back in the swipe deck.
+            Match.find({ users: req.user._id }).select('users'),
+        ]);
+
+        const recentSwipedIds = recentSwipes.map(s => s.to);
+        const matchedIds = matches.flatMap(m =>
+            m.users.filter(uid => uid.toString() !== req.user._id.toString())
+        );
+
+        const excludedIds = [...recentSwipedIds, ...matchedIds];
 
         const filter = {
-            _id: { $ne: req.user._id, $nin: swipedIds },
+            _id: { $ne: req.user._id, $nin: excludedIds },
             isAvailable: true,
         };
 

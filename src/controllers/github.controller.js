@@ -2,7 +2,29 @@ const User = require('../models/User');
 const { generateGithubSummary } = require('../services/vertexai.service');
 const { getIO } = require('../socket/socket');
 
-const fetchGithubData = async (username) => {
+// Profiles store the GitHub field as a full URL (e.g.
+// "https://github.com/TheOneWhoCodess"), but the GitHub API needs a bare
+// username. This accepts either form so callers don't have to normalize
+// it themselves:
+//   "https://github.com/TheOneWhoCodess"  -> "TheOneWhoCodess"
+//   "github.com/TheOneWhoCodess"          -> "TheOneWhoCodess"
+//   "TheOneWhoCodess"                     -> "TheOneWhoCodess"
+//   "https://github.com/TheOneWhoCodess/" -> "TheOneWhoCodess" (trailing slash)
+const extractGithubUsername = (input) => {
+    if (!input) return null;
+    const trimmed = input.trim();
+
+    const urlMatch = trimmed.match(/github\.com\/([^\/?#]+)/i);
+    if (urlMatch) return urlMatch[1];
+
+    // Not a URL — assume it's already a bare username.
+    return trimmed.replace(/^\/+|\/+$/g, '');
+};
+
+const fetchGithubData = async (rawUsername) => {
+    const username = extractGithubUsername(rawUsername);
+    if (!username) return null;
+
     const headers = {
         Accept: 'application/vnd.github.v3+json',
         ...(process.env.GITHUB_TOKEN && {
@@ -80,7 +102,7 @@ const summarizeGithub = async (req, res) => {
         if (!data) return res.status(404).json({ message: 'GitHub user not found' });
 
         const { summary } = await generateGithubSummary({
-            username: user.github,
+            username: extractGithubUsername(user.github),
             repos: data.repos,
             languages: data.languages,
         });

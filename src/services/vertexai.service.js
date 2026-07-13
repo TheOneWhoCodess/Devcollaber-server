@@ -1,30 +1,40 @@
 const { GoogleGenAI, Type } = require('@google/genai');
 
-// Vertex AI auth is IAM-based (service account), not a simple API key.
-// Required env vars: GOOGLE_CLOUD_PROJECT, GOOGLE_CLOUD_LOCATION,
-// and GOOGLE_APPLICATION_CREDENTIALS pointing at a service account JSON key
-// (or workload identity federation if deployed on GCP infra).
-const ai = new GoogleGenAI({
-    vertexai: true,
-    project: process.env.GOOGLE_CLOUD_PROJECT,
-    location: process.env.GOOGLE_CLOUD_LOCATION || 'us-central1',
-});
+// Gemini Developer API auth (Google AI Studio) - a plain API key, not
+// Vertex AI's IAM-based service-account/ADC auth. No GCP project,
+// no service account JSON, no gcloud CLI needed.
+// Required env var: GEMINI_API_KEY (from https://aistudio.google.com/apikey)
+//
+// Client is created lazily on first use, not at module load time - this
+// avoids crashing the whole server at require() if the env var isn't
+// loaded yet or is briefly missing, and matches how getClient() below
+// only builds it once and reuses it after.
+let _ai = null;
+function getClient() {
+    if (_ai) return _ai;
+    if (!process.env.GEMINI_API_KEY) {
+        throw new Error('GEMINI_API_KEY is not set');
+    }
+    _ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    return _ai;
+}
 
 const MODEL = process.env.VERTEX_MODEL || 'gemini-2.0-flash';
 const TIMEOUT_MS = 6000;
 
-// Wraps a Vertex AI call with a hard timeout so a slow/unavailable model
+// Wraps a Gemini call with a hard timeout so a slow/unavailable model
 // never blocks a swipe response or a profile save.
 const withTimeout = (promise, ms) => {
     return Promise.race([
         promise,
         new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Vertex AI request timed out')), ms)
+            setTimeout(() => reject(new Error('Gemini request timed out')), ms)
         ),
     ]);
 };
 
 const callGemini = async (prompt, schema) => {
+    const ai = getClient();
     const response = await withTimeout(
         ai.models.generateContent({
             model: MODEL,
@@ -33,14 +43,45 @@ const callGemini = async (prompt, schema) => {
                 responseMimeType: 'application/json',
                 responseSchema: schema,
                 temperature: 0.7,
-                maxOutputTokens: 300,
+                maxOutputTokens: 1024,
+                // 2.5-generation models spend part of maxOutputTokens on
+                // invisible "thinking" tokens before writing the visible
+                // response. For short structured JSON like this (no
+                // multi-step reasoning needed), that thinking budget was
+                // eating the entire token cap and leaving a truncated
+                // response (just "{"), which then failed to parse.
+                // Disabling it here fixes that; harmless no-op on models
+                // that don't support thinking at all.
+                thinkingConfig: { thinkingBudget: 0 },
             },
         }),
         TIMEOUT_MS
     );
 
-    const text = response.text;
-    return JSON.parse(text);
+    const text = (response.text || '').trim();
+    if (!text) {
+        throw new Error('Gemini returned an empty response');
+    }
+
+    try {
+        return JSON.parse(text);
+    } catch (err) {
+        // Some responses include prose before/after the JSON object even
+        // with responseSchema set (e.g. "Here is the JSON: {...}"). As a
+        // fallback, pull out the first {...} block and try that instead
+        // of failing outright.
+        const match = text.match(/\{[\s\S]*\}/);
+        if (match) {
+            try {
+                return JSON.parse(match[0]);
+            } catch (innerErr) {
+                console.error('Gemini returned unparseable text:', text.slice(0, 200));
+                throw innerErr;
+            }
+        }
+        console.error('Gemini returned non-JSON text:', text.slice(0, 200));
+        throw err;
+    }
 };
 
 // --- Feature: AI Match Explainer ---
