@@ -1,86 +1,7 @@
 const User = require('../models/User');
 const { generateGithubSummary } = require('../services/vertexai.service');
 const { getIO } = require('../socket/socket');
-
-// Profiles store the GitHub field as a full URL (e.g.
-// "https://github.com/TheOneWhoCodess"), but the GitHub API needs a bare
-// username. This accepts either form so callers don't have to normalize
-// it themselves:
-//   "https://github.com/TheOneWhoCodess"  -> "TheOneWhoCodess"
-//   "github.com/TheOneWhoCodess"          -> "TheOneWhoCodess"
-//   "TheOneWhoCodess"                     -> "TheOneWhoCodess"
-//   "https://github.com/TheOneWhoCodess/" -> "TheOneWhoCodess" (trailing slash)
-const extractGithubUsername = (input) => {
-    if (!input) return null;
-    const trimmed = input.trim();
-
-    const urlMatch = trimmed.match(/github\.com\/([^\/?#]+)/i);
-    if (urlMatch) return urlMatch[1];
-
-    // Not a URL — assume it's already a bare username.
-    return trimmed.replace(/^\/+|\/+$/g, '');
-};
-
-const fetchGithubData = async (rawUsername) => {
-    const username = extractGithubUsername(rawUsername);
-    if (!username) return null;
-
-    const headers = {
-        Accept: 'application/vnd.github.v3+json',
-        ...(process.env.GITHUB_TOKEN && {
-            Authorization: `Bearer ${process.env.GITHUB_TOKEN}`
-        }),
-    };
-
-    const [userRes, reposRes] = await Promise.all([
-        fetch(`https://api.github.com/users/${username}`, { headers }),
-        fetch(`https://api.github.com/users/${username}/repos?sort=stars&per_page=10`, { headers }),
-    ]);
-
-    if (!userRes.ok) {
-        // Log the real reason instead of collapsing every failure into
-        // an identical "not found" — 403 (rate limit) and 404 (actually
-        // missing) look the same to the frontend otherwise.
-        const body = await userRes.text().catch(() => '');
-        console.error(
-            `[github] fetch failed for "${username}": status=${userRes.status} ` +
-            `rateLimitRemaining=${userRes.headers.get('x-ratelimit-remaining')} body=${body.slice(0, 300)}`
-        );
-        return null;
-    }
-
-    const userData = await userRes.json();
-    const repos = await reposRes.json();
-
-    const languages = {};
-    await Promise.all(
-        repos.slice(0, 8).map(async (repo) => {
-            try {
-                const langRes = await fetch(repo.languages_url, { headers });
-                const langData = await langRes.json();
-                Object.entries(langData).forEach(([lang, bytes]) => {
-                    languages[lang] = (languages[lang] || 0) + bytes;
-                });
-            } catch {
-                // skip if language fetch fails
-            }
-        })
-    );
-
-    return {
-        followers: userData.followers,
-        contributions: userData.public_repos,
-        repos: repos.map(r => ({
-            name: r.name,
-            description: r.description,
-            stars: r.stargazers_count,
-            forks: r.forks_count,
-            language: r.language,
-            url: r.html_url,
-        })),
-        languages,
-    };
-};
+const { extractGithubUsername, fetchGithubData } = require('../services/github.service');
 
 const getGitHubStats = async (req, res) => {
     try {
@@ -96,12 +17,6 @@ const getGitHubStats = async (req, res) => {
     }
 };
 
-// Authenticated action, bound to the logged-in user's own profile only —
-// unlike getGitHubStats above (which is a public lookup by ?username=),
-// this writes to req.user's stored profile, so it must not accept an
-// arbitrary username from the query string. Meant to be triggered by an
-// explicit "Sync GitHub" button, not on every profile view, since each
-// call costs an LLM invocation.
 const summarizeGithub = async (req, res) => {
     try {
         const user = await User.findById(req.user._id);
@@ -117,9 +32,10 @@ const summarizeGithub = async (req, res) => {
             languages: data.languages,
         });
 
-        user.githubSummary = summary;
-        user.githubSummaryUpdatedAt = new Date();
-        await user.save();
+        await User.findByIdAndUpdate(user._id, {
+            githubSummary: summary,
+            githubSummaryUpdatedAt: new Date(),
+        });
 
         try {
             getIO().to(user._id.toString()).emit('github_summary_ready', {

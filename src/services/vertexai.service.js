@@ -213,4 +213,184 @@ Suggest one specific, buildable project idea that uses both developers' skills. 
     }
 };
 
-module.exports = { generateMatchExplanation, generateGithubSummary, generateProjectIdea };
+// --- Feature: AI Icebreaker (used by the Match Concierge agent below) ---
+
+const icebreakerSchema = {
+    type: Type.OBJECT,
+    properties: {
+        icebreaker: { type: Type.STRING },
+    },
+    required: ['icebreaker'],
+};
+
+const generateIcebreaker = async ({ userA, userB, githubContext }) => {
+    const fallback = `Hey! Noticed you both work with ${(userA.skills || []).find(s => (userB.skills || []).includes(s)) || 'similar tech'} — what are you building right now?`;
+    try {
+        const prompt = `Two developers just matched on a project-collaboration app and haven't messaged yet.
+Write ONE short, casual icebreaker message (max 25 words) that Developer A could send to Developer B to start the conversation. Reference something specific and real, not generic ("hey, nice profile!").
+
+Developer A: role=${userA.role}, skills=${(userA.skills || []).join(', ')}
+Developer B: role=${userB.role}, skills=${(userB.skills || []).join(', ')}
+${githubContext ? `Developer B's recent GitHub activity: ${githubContext}` : ''}
+
+Return JSON only.`;
+        const result = await callGemini(prompt, icebreakerSchema);
+        return result?.icebreaker || fallback;
+    } catch (err) {
+        console.error('Icebreaker generation failed:', err.message);
+        return fallback;
+    }
+};
+
+// --- Feature: Match Concierge Agent ---
+//
+// Unlike the functions above (single prompt in, single structured result
+// out), this is a genuine agent loop: the model is given a goal and a set
+// of tools, and DECIDES for itself which tools to call, in what order,
+// based on what it learns — rather than the backend deciding what to
+// generate. The model can call read-only "investigation" tools
+// (getChatHistory, getGithubActivity) zero or more times before making
+// its final decision by calling chooseAction, which is not executed by
+// us — it's how the model reports its decision back.
+//
+// toolExecutors are the REAL functions that run when the model requests
+// a tool call. These are only ever invoked here, server-side — the model
+// never touches the database directly.
+const buildToolExecutors = ({ matchId, userA, userB }) => ({
+    getChatHistory: async () => {
+        const Message = require('../models/Message');
+        const messages = await Message.find({ matchId }).sort({ createdAt: -1 }).limit(1);
+        const count = await Message.countDocuments({ matchId });
+        const lastMessageAt = messages[0]?.createdAt || null;
+        const daysSinceLastMessage = lastMessageAt
+            ? Math.floor((Date.now() - new Date(lastMessageAt).getTime()) / (1000 * 60 * 60 * 24))
+            : null;
+        return { messageCount: count, daysSinceLastMessage };
+    },
+    getGithubActivity: async ({ which }) => {
+        const { fetchGithubData } = require('./github.service');
+        const target = which === 'userB' ? userB : userA;
+        if (!target.github) return { available: false };
+        const data = await fetchGithubData(target.github);
+        if (!data) return { available: false };
+        const topLanguages = Object.entries(data.languages || {})
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 3)
+            .map(([lang]) => lang);
+        return {
+            available: true,
+            repoCount: data.repos.length,
+            topLanguages,
+            recentRepoNames: data.repos.slice(0, 3).map(r => r.name),
+        };
+    },
+});
+
+const toolDeclarations = [
+    {
+        name: 'getChatHistory',
+        description: "Check how many messages this match has exchanged and how long since the last one. Use this first to decide if they've already started talking.",
+        parameters: { type: Type.OBJECT, properties: {} },
+    },
+    {
+        name: 'getGithubActivity',
+        description: 'Look up a specific developer\'s recent GitHub repos and languages, to make a suggestion more specific and personal.',
+        parameters: {
+            type: Type.OBJECT,
+            properties: {
+                which: { type: Type.STRING, enum: ['userA', 'userB'], description: 'Which of the two matched developers to look up.' },
+            },
+            required: ['which'],
+        },
+    },
+    {
+        name: 'chooseAction',
+        description: 'Report your final decision on what would most help this match. Call this LAST, once you have enough information.',
+        parameters: {
+            type: Type.OBJECT,
+            properties: {
+                action: {
+                    type: Type.STRING,
+                    enum: ['icebreaker', 'project_idea', 'follow_up_nudge'],
+                    description: "icebreaker: they haven't talked yet, suggest an opening message. project_idea: they're already talking, suggest something concrete to build. follow_up_nudge: they talked once then went quiet, just flag it for a reminder rather than generating content.",
+                },
+                reasoning: { type: Type.STRING, description: 'One short sentence explaining why, based on what you found.' },
+            },
+            required: ['action', 'reasoning'],
+        },
+    },
+];
+
+const MAX_AGENT_STEPS = 5;
+
+const runMatchConcierge = async ({ matchId, userA, userB, sharedSkills = [] }) => {
+    const ai = getClient();
+    const executors = buildToolExecutors({ matchId, userA, userB });
+
+    const contents = [
+        {
+            role: 'user',
+            parts: [{
+                text: `You're an assistant helping two developers who just matched on a collaboration app succeed at working together.
+Developer A: role=${userA.role}, skills=${(userA.skills || []).join(', ')}
+Developer B: role=${userB.role}, skills=${(userB.skills || []).join(', ')}
+Shared skills: ${sharedSkills.join(', ') || 'none directly listed'}
+
+You have tools to investigate their situation before deciding what would help most. Use them if useful, then call chooseAction with your final decision. Don't over-investigate — 1-2 tool calls is usually enough.`,
+            }],
+        },
+    ];
+
+    const toolsUsed = [];
+    let decision = null;
+
+    for (let step = 0; step < MAX_AGENT_STEPS; step++) {
+        const response = await withTimeout(
+            ai.models.generateContent({
+                model: MODEL,
+                contents,
+                config: {
+                    tools: [{ functionDeclarations: toolDeclarations }],
+                    thinkingConfig: { thinkingBudget: 0 },
+                },
+            }),
+            TIMEOUT_MS
+        );
+
+        const parts = response.candidates?.[0]?.content?.parts || [];
+        const functionCallPart = parts.find(p => p.functionCall);
+
+        if (!functionCallPart) break; // model gave up without deciding — treat as failure below
+
+        const { name, args } = functionCallPart.functionCall;
+        contents.push({ role: 'model', parts: [{ functionCall: { name, args } }] });
+
+        if (name === 'chooseAction') {
+            decision = args;
+            break;
+        }
+
+        toolsUsed.push(name);
+        const executor = executors[name];
+        const result = executor ? await executor(args || {}) : { error: 'unknown tool' };
+
+        contents.push({
+            role: 'user',
+            parts: [{ functionResponse: { name, response: { result } } }],
+        });
+    }
+
+    if (!decision) {
+        throw new Error('Agent did not reach a decision within the step limit');
+    }
+
+    return { action: decision.action, reasoning: decision.reasoning, toolsUsed };
+};
+
+module.exports = {
+    generateMatchExplanation,
+    generateGithubSummary,
+    generateProjectIdea,
+    generateIcebreaker,
+    runMatchConcierge,
+};

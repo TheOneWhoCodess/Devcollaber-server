@@ -24,6 +24,27 @@ const MatchSchema = new mongoose.Schema({
         enum: ['none', 'pending', 'ready', 'failed'],
         default: 'none',
     },
+    // Match Concierge agent: unlike matchExplanation/projectIdea above
+    // (fixed single-shot generations), this is the result of an actual
+    // agent loop that investigated the match (chat history, GitHub
+    // activity) before deciding what would help. `action` records WHICH
+    // content type it decided to generate; the generated content itself
+    // is stored in icebreaker (new) or reuses projectIdea/projectIdeaStatus
+    // above when action === 'project_idea'.
+    concierge: {
+        status: {
+            type: String,
+            enum: ['none', 'investigating', 'ready', 'failed'],
+            default: 'none',
+        },
+        action: {
+            type: String,
+            enum: ['icebreaker', 'project_idea', 'follow_up_nudge'],
+        },
+        reasoning: { type: String },
+        icebreaker: { type: String },
+        toolsUsed: [{ type: String }],
+    },
 }, { timestamps: true });
 
 MatchSchema.index({ users: 1 });
