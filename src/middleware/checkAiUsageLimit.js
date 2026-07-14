@@ -38,9 +38,14 @@ const checkAiUsageLimit = async (req, res, next) => {
         // Increment (or reset-and-set-to-1 if it's a new day) via a
         // targeted update — avoids re-triggering full-document
         // validation on unrelated fields, same lesson as elsewhere.
+        // totalAiActionsUsed increments unconditionally — it never
+        // resets, used for achievements/dashboard stats.
+        // NOTE: $set and $inc must both be explicit operators here —
+        // MongoDB rejects mixing plain top-level fields with $ operators
+        // in the same update document.
         await User.findByIdAndUpdate(user._id, {
-            aiUsageCount: currentCount + 1,
-            aiUsageDate: today,
+            $set: { aiUsageCount: currentCount + 1, aiUsageDate: today },
+            $inc: { totalAiActionsUsed: 1 },
         });
 
         next();

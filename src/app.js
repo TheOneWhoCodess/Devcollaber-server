@@ -18,6 +18,9 @@ const githubRoutes = require('./routes/github.routes');
 const helpRoutes = require('./routes/help.routes');
 const feedbackRoutes = require('./routes/feedback.routes');
 const paymentRoutes = require('./routes/payment.routes');
+const dashboardRoutes = require('./routes/dashboard.routes');
+const projectDescriptionRoutes = require('./routes/projectDescription.routes');
+const applicationRankingRoutes = require('./routes/applicationRanking.routes');
 
 connectDB();
 
@@ -71,6 +74,7 @@ app.use('/api/github', limiter); // ✅ now safe — limiter is defined above
 app.use('/api/feedback', limiter);
 app.use('/api/help', helpLimiter);
 app.use('/api/payment', limiter);
+app.use('/api/dashboard', limiter);
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -79,12 +83,15 @@ app.use('/api/swipe', swipeRoutes);
 app.use('/api/matches', matchRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/projects', projectRoutes);
+app.use('/api/projects', projectDescriptionRoutes);
+app.use('/api/projects', applicationRankingRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/github', githubRoutes);
 app.use('/api/help', helpRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/payment', paymentRoutes);
-
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/profile', require('./routes/linkPreview.routes'));
 app.get('/', (req, res) => {
     res.json({ success: true, message: 'DevCollab API running' });
 });

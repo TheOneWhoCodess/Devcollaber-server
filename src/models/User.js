@@ -18,6 +18,7 @@ const UserSchema = new mongoose.Schema({
     githubSummary: { type: String, default: '' },     // AI-generated plain-English repo summary
     githubSummaryUpdatedAt: { type: Date },
     linkedin: { type: String, default: '' },
+    website: { type: String, default: '' },   // portfolio URL, shown as a preview card on the public profile
     isAvailable: { type: Boolean, default: true },
     location: { type: String },
     eloScore: { type: Number, default: 1200 },   // for match ranking
@@ -42,6 +43,12 @@ const UserSchema = new mongoose.Schema({
     },
     aiUsageDate: {
         type: Date, // the day aiUsageCount is counting for; reset when this is stale
+    },
+    // Lifetime counter, never resets — used for achievements/dashboard
+    // stats, separate from the daily-resetting aiUsageCount above.
+    totalAiActionsUsed: {
+        type: Number,
+        default: 0,
     },
 }, { timestamps: true });
 

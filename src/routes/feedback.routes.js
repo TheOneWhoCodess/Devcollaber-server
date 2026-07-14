@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const Feedback = require('../models/Feedback');
+const Feedback = require('../models/feedback');
 const { protect } = require('../middleware/auth.middleware');
 
 router.post('/', protect, async (req, res) => {

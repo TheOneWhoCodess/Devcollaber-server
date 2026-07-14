@@ -118,7 +118,7 @@ const updateProfile = async (req, res) => {
     try {
         const allowed = [
             'name', 'bio', 'role', 'skills', 'lookingFor', 'projectIdea',
-            'projectType', 'commitment', 'experience', 'github', 'linkedin',
+            'projectType', 'commitment', 'experience', 'github', 'linkedin', 'website',
             'isAvailable', 'location'
         ];
         const updates = {};
